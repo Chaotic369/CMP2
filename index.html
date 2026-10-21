@@ -4757,14 +4757,11 @@ function onPtrUp(e) {
 function openPushCommitModal() {
   if (typeof syncEditorToSource === 'function') syncEditorToSource();
   if (!ghToken || !ghRepo) { toast('❌ Configure GitHub settings and select a repo first.', 'warn'); return; }
-  var cm = document.getElementById('commitModal');
-  if (!cm) return;
-  cm.classList.add('open');
-  cm.style.display = 'flex';
-  $backdrop.classList.add('open', 'dimmed');
-  if (typeof bringModalToFront === 'function') { try { bringModalToFront(cm); } catch (err) {} }
-  var mi = document.getElementById('commitMsgInput');
-  if (mi) mi.focus();
+  if (window._pushInFlight) return;
+  window._pushInFlight = true;
+  var done = function() { window._pushInFlight = false; };
+  var p = window.oneClickPush ? window.oneClickPush() : null;
+  if (p && typeof p.then === 'function') { p.then(done, done); } else { done(); }
 }
 var $mainPushBtn = document.getElementById('ghPushBtn');
 if ($mainPushBtn) {
@@ -9503,13 +9500,20 @@ document.getElementById('cmCancelBtn').addEventListener('click', function() {
   $backdrop.classList.remove('open');
 });
 
-document.getElementById('cmConfirmBtn').addEventListener('click', async function() {
+document.getElementById('cmConfirmBtn').addEventListener('click', function() {
+  var cm = document.getElementById('commitModal');
+  var mi = document.getElementById('commitMsgInput');
+  var typed = mi ? mi.value.trim() : '';
+  if (!typed) { toast('❌ Enter a commit message', 'warn'); return; }
+  cm.classList.remove('open');
+  cm.style.display = 'none';
+  $backdrop.classList.remove('open');
+  window.oneClickPush(typed);
+});
+
+window.oneClickPush = async function(customMsg) {
   syncEditorToSource();
-  const msg = document.getElementById('commitMsgInput').value.trim();
-  if (!msg) { toast('❌ Enter a commit message', 'warn'); return; }
-    document.getElementById('commitModal').classList.remove('open');
-    document.getElementById('commitModal').style.display = 'none';
-    $backdrop.classList.remove('open');
+  var msg = customMsg || '';
   
   const btn = document.getElementById('ghPushBtn');
   btn.disabled = true;
@@ -9529,14 +9533,20 @@ document.getElementById('cmConfirmBtn').addEventListener('click', async function
   }
 
   if (filesToCommit.length === 0) {
-      toast('❌ Nothing to push.', 'warn');
-      btn.disabled = false;
-      hideProgress();
-      return;
-  }
+        toast('❌ Nothing to push.', 'warn');
+        btn.disabled = !ghRepo || !ghToken;
+        hideProgress();
+        return;
+    }
 
-  try {
-    if (filesToCommit.length === 1) {
+    if (!msg) {
+        msg = filesToCommit.length === 1
+            ? 'Update ' + (filesToCommit[0].path.split('/').pop() || filesToCommit[0].path)
+            : 'Update ' + filesToCommit.length + ' files';
+    }
+
+    try {
+      if (filesToCommit.length === 1) {
         toast('⬆ Pushing to GitHub...', 'info');
         let f = filesToCommit[0];
         let sha = null;
@@ -9585,10 +9595,10 @@ document.getElementById('cmConfirmBtn').addEventListener('click', async function
     toast('❌ Push failed: ' + e.message, 'err');
     addLog('err', 'GitHub Push Error: ' + e.message);
   } finally {
-    btn.disabled = false;
-    hideProgress();
-      }
-    });
+      btn.disabled = !ghRepo || !ghToken;
+      hideProgress();
+    }
+  };
 
                     // Modals are closed via their explicit close/cancel buttons
 
