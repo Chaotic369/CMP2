@@ -203,6 +203,7 @@
       runAuthAction(async function() {
         var gp = new GithubAuthProvider();
         gp.addScope('repo');
+                gp.addScope('workflow');
         var res = await signInWithPopup(auth, gp);
         var cred = GithubAuthProvider.credentialFromResult(res);
         var tok = cred && cred.accessToken;
